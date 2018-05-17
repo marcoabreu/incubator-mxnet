@@ -64,18 +64,19 @@ class ProgressPercentage(object):
                 logging.info('{}% of {}'.format(percentage, self._object_name))
 
 
-def build_save_containers(platforms, bucket) -> int:
+def build_save_containers(platforms, bucket, load_cache) -> int:
     """
     Entry point to build and upload all built dockerimages in parallel
     :param platforms: List of platforms
     :param bucket: S3 bucket name
+    :param load_cache: Load cache before building
     :return: 1 if error occurred, 0 otherwise
     """
     if len(platforms) == 0:
         return 0
 
     platform_results = Parallel(n_jobs=len(platforms), backend="multiprocessing")(
-        delayed(_build_save_container)(platform, bucket)
+        delayed(_build_save_container)(platform, bucket, load_cache)
         for platform in platforms)
 
     is_error = False
@@ -87,18 +88,19 @@ def build_save_containers(platforms, bucket) -> int:
     return 1 if is_error else 0
 
 
-def _build_save_container(platform, bucket) -> str:
+def _build_save_container(platform, bucket, load_cache) -> str:
     """
     Build image for passed platform and upload the cache to the specified S3 bucket
     :param platform: Platform
     :param bucket: Target s3 bucket
+    :param load_cache: Load cache before building
     :return: Platform if failed, None otherwise
     """
     docker_tag = build_util.get_docker_tag(platform)
 
     # Preload cache
-    # TODO: Allow to disable this in order to allow clean rebuilds
-    load_docker_cache(bucket_name=bucket, docker_tag=docker_tag)
+    if load_cache:
+        load_docker_cache(bucket_name=bucket, docker_tag=docker_tag)
 
     # Start building
     logging.debug('Building {} as {}'.format(platform, docker_tag))
@@ -228,6 +230,27 @@ def load_docker_cache(bucket_name, docker_tag) -> None:
         logging.info('No cached remote image of {} present'.format(docker_tag))
 
 
+def delete_local_docker_cache(docker_tag):
+    """
+    Delete the local docker cache for the entire docker image chain
+    :param docker_tag: Docker tag
+    :return: None
+    """
+    history_cmd = ['docker', 'history', '-q', docker_tag]
+
+    try:
+        image_ids_b = subprocess.check_output(history_cmd)
+        image_ids_str = image_ids_b.decode('utf-8').strip()
+        layer_ids = [id.strip() for id in image_ids_str.split('\n') if id != '<missing>']
+
+        delete_cmd = ['docker', 'image', 'rm', '--force']
+        delete_cmd.extend(layer_ids)
+        subprocess.check_call(delete_cmd)
+    except subprocess.CalledProcessError as error:
+        # Could be caused by the image not being present
+        logging.debug('Error during local cache deletion %s', error)
+
+
 def _docker_layer_exists(layer_id) -> bool:
     """
     Check if the docker cache contains the layer with the passed id
@@ -285,7 +308,7 @@ def main() -> int:
 
     platforms = build_util.get_platforms()
     _get_aws_session()  # Init AWS credentials
-    return build_save_containers(platforms=platforms, bucket=args.docker_cache_bucket)
+    return build_save_containers(platforms=platforms, bucket=args.docker_cache_bucket, load_cache=True)
 
 
 if __name__ == '__main__':
