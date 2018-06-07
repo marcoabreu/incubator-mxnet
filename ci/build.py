@@ -222,8 +222,7 @@ def main() -> int:
                         action='store_true')
 
     parser.add_argument("--docker-registry",
-                        help="Dockerhub registry name to retrieve cache from",
-                        default='mxnetci',
+                        help="Dockerhub registry name to retrieve cache from.",
                         type=str)
 
     parser.add_argument("command",
