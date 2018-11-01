@@ -89,6 +89,7 @@ def under_ci() -> bool:
 
 
 def ec2_instance_id_hostname() -> str:
+    from requests.exceptions import ConnectionError
     if under_ci():
         result = []
         try:
@@ -99,8 +100,8 @@ def ec2_instance_id_hostname() -> str:
             if r.status_code == 200:
                 result.append(r.content.decode())
             return ' '.join(result)
-        except ConnectionError:
-            pass
+        except (ConnectionError):
+            logging.info('Not running inside AWS')
         return '?'
     else:
         return ''

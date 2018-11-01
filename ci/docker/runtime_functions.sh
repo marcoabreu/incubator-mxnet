@@ -1118,6 +1118,28 @@ nightly_straight_dope_python3_multi_gpu_tests() {
       test_notebooks_multi_gpu.py --nologcapture
 }
 
+# physical edge devices
+
+raspberry_test_python_3() {
+    set -ex
+    whoami
+    python_install_wheel "pip3" "/work/build/mxnet-*-py2.py3-none-any.whl"  
+    export MXNET_MKLDNN_DEBUG=1  # Ignored if not present
+    export MXNET_STORAGE_FALLBACK_LOG_VERBOSE=0
+    SKIPPED_TESTS = "--exclude-test=test_gluon.test_symbol_block "
+    nosetests-3.4 $NOSE_COVERAGE_ARGUMENTS --with-xunit --xunit-file nosetests_unittest.xml $SKIPPED_TESTS --verbose tests/python/unittest
+}
+
+# Install the passed python wheel
+python_install_wheel() {
+    # param1: pip binary (pip2/pip3)
+    # param2: path to wheel
+
+    # Find the first occurance in case a pattern was passed
+    files=($2)
+    sudo $1 install "${files[0]}"
+}
+
 # Deploy
 
 deploy_docs() {

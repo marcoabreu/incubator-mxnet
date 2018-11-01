@@ -138,14 +138,13 @@ def docker_run(platform, function_name, use_nvidia, shared_mem = '500m') {
   sh command
 }
 
-
-
 def assign_node_labels(args) {
   NODE_LINUX_CPU = args.linux_cpu
   NODE_LINUX_GPU = args.linux_gpu
   NODE_LINUX_GPU_P3 = args.linux_gpu_p3
   NODE_WINDOWS_CPU = args.windows_cpu
   NODE_WINDOWS_GPU = args.windows_gpu
+  NODE_RASPBERRY_PI_3 = args.raspberry_pi_3
 }
 
 def main_wrapper(args) {

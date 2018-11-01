@@ -35,6 +35,7 @@ then
         useradd -m --no-log-init --uid $USER_ID --system jenkins_slave
     fi
     usermod -aG sudo jenkins_slave
+    echo "jenkins_slave ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
     # By default, docker creates all WORK_DIRs with root owner
     mkdir /work/mxnet

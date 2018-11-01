@@ -37,6 +37,9 @@ apt-get install -y --no-install-recommends libboost-all-dev
 cd /work/deps
 git clone http://github.com/BVLC/caffe.git
 
+pip2 install h5py==2.8.0rc1
+pip3 install h5py==2.8.0rc1
+
 cd caffe
 cp Makefile.config.example Makefile.config
 
