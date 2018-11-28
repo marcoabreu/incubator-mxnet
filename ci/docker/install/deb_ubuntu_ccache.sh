@@ -47,6 +47,11 @@ cd ccache
 # by default).
 CC=/usr/bin/gcc CXX=/usr/bin/g++ ./configure
 
+# Later on, we have to override the links because underlying build systems ignore our compiler settings. Thus,
+# we have to give the process the proper permission to these files. This is hacky, but unfortunately 
+# there's no better way to do this without patching all our submodules.
+chown -R jenkins_slave /usr/local/bin
+
 # Don't build documentation #11214
 #perl -pi -e 's!\s+\Q$(installcmd) -d $(DESTDIR)$(mandir)/man1\E!!g' Makefile
 #perl -pi -e 's!\s+\Q-$(installcmd) -m 644 ccache.1 $(DESTDIR)$(mandir)/man1/\E!!g' Makefile

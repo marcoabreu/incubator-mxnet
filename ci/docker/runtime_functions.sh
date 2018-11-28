@@ -36,35 +36,35 @@ clean_repo() {
     git submodule update --init --recursive
 }
 
-build_ccache_wrappers() {
+install_ccache_wrappers() {
     set -ex
 
-    rm -f cc
-    rm -f cxx
+    # Add to the beginning of path to ensure this redirection is picked up instead
+    # of the original ones. Especially CUDA/NVCC appends itself to the beginning of the
+    # path and thus this redirect is ignored. This change fixes this problem
+    # This hacky approach with symbolic links is required because underlying build
+    # systems of our submodules ignore our CMake settings. If they use Makefile,
+    # we can't influence them at all in general and NVCC also prefers to hardcode their
+    # compiler instead of respecting the settings. Thus, we take this brutal approach
+    # and just redirect everything of this installer has been called.
+    # In future, we could do these links during image build time of the container.
+    # But in the beginning, we'll make this opt-in. In future, loads of processes like
+    # the scala make step or numpy compilation and other pip package generations
+    # could be heavily sped up by using ccache as well.
+    export PATH=/usr/local/bin:$PATH
+    ln -s ccache /usr/local/bin/gcc
+    ln -s ccache /usr/local/bin/g++
+    ln -s ccache /usr/local/bin/g++-8
+    ln -s ccache /usr/local/bin/gcc-8
+    ln -s ccache /usr/local/bin/nvcc
+    ln -s ccache /usr/local/bin/clang++-3.9
+    ln -s ccache /usr/local/bin/clang-3.9
+    ln -s ccache /usr/local/bin/clang++-5.0
+    ln -s ccache /usr/local/bin/clang-5.0
+    ln -s ccache /usr/local/bin/clang++-6.0
+    ln -s ccache /usr/local/bin/clang-6.0
 
-    touch cc
-    touch cxx
-
-    if [ -z ${CC+x} ]; then
-        echo "No \$CC set, defaulting to gcc";
-        export CC=gcc
-    fi
-
-    if [ -z ${CXX+x} ]; then
-       echo "No \$CXX set, defaulting to g++";
-       export CXX=g++
-    fi
-
-    # this function is nessesary for cuda enabled make based builds, since nvcc needs just an executable for -ccbin
-
-    echo -e "#!/bin/sh\n/usr/local/bin/ccache ${CC} \"\$@\"\n" >> cc
-    echo -e "#!/bin/sh\n/usr/local/bin/ccache ${CXX} \"\$@\"\n" >> cxx
-
-    chmod +x cc
-    chmod +x cxx
-
-    export CC=`pwd`/cc
-    export CXX=`pwd`/cxx
+    export CCACHE_LOGFILE=/work/mxnet/ccache-log
 }
 
 build_wheel() {
@@ -128,11 +128,9 @@ build_armv6() {
     # to be linked additionally.
 
     # We do not need OpenMP, since most armv6 systems have only 1 core
-
+    install_ccache_wrappers
     cmake \
         -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE} \
-        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DUSE_CUDA=OFF \
         -DUSE_OPENCV=OFF \
         -DUSE_OPENMP=OFF \
@@ -159,11 +157,10 @@ build_armv7() {
     # file tries to add -llapack. Lapack functionality though, requires -lgfortran
     # to be linked additionally.
 
+    install_ccache_wrappers
     cmake \
         -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE} \
         -DCMAKE_CROSSCOMPILING=ON \
-        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DUSE_CUDA=OFF \
         -DUSE_OPENCV=OFF \
         -DUSE_OPENMP=ON \
@@ -181,9 +178,8 @@ build_armv7() {
 }
 
 build_armv8() {
+    install_ccache_wrappers
     cmake \
-        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DUSE_CUDA=OFF\
         -DSUPPORT_F16C=OFF\
         -DUSE_OPENCV=OFF\
@@ -205,10 +201,9 @@ build_armv8() {
 build_android_armv7() {
     set -ex
     cd /work/build
+    install_ccache_wrappers
     cmake \
         -DANDROID=ON\
-        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DUSE_CUDA=OFF\
         -DUSE_SSE=OFF\
         -DSUPPORT_F16C=OFF\
@@ -225,6 +220,7 @@ build_android_armv7() {
 build_android_armv8() {
     set -ex
     cd /work/build
+    install_ccache_wrappers
     cmake\
         -DANDROID=ON \
         -DUSE_CUDA=OFF\
@@ -242,9 +238,8 @@ build_android_armv8() {
 build_centos7_cpu() {
     set -ex
     cd /work/mxnet
-    export CC="ccache gcc"
-    export CXX="ccache g++"
 
+    install_ccache_wrappers
     make \
         DEV=1 \
         USE_LAPACK=1 \
@@ -257,9 +252,8 @@ build_centos7_cpu() {
 
 build_amzn_linux_cpu() {
     cd /work/build
+    install_ccache_wrappers
     cmake \
-        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DENABLE_TESTCOVERAGE=ON \
         -DUSE_CUDA=OFF\
         -DUSE_OPENCV=ON\
@@ -277,9 +271,8 @@ build_amzn_linux_cpu() {
 build_centos7_mkldnn() {
     set -ex
     cd /work/mxnet
-    export CC="ccache gcc"
-    export CXX="ccache g++"
-
+    
+    install_ccache_wrappers
     make \
         DEV=1 \
         ENABLE_TESTCOVERAGE=1 \
@@ -293,8 +286,7 @@ build_centos7_mkldnn() {
 build_centos7_gpu() {
     set -ex
     cd /work/mxnet
-    # unfortunately this build has problems in 3rdparty dependencies with ccache and make
-    # build_ccache_wrappers
+    install_ccache_wrappers
     make \
         DEV=1                                     \
         ENABLE_TESTCOVERAGE=1                     \
@@ -315,8 +307,7 @@ build_ubuntu_cpu() {
 
 build_ubuntu_cpu_openblas() {
     set -ex
-    export CC="ccache gcc"
-    export CXX="ccache g++"
+    install_ccache_wrappers
     make \
         DEV=1                         \
         ENABLE_TESTCOVERAGE=1         \
@@ -330,9 +321,8 @@ build_ubuntu_cpu_cmake_debug() {
     set -ex
     pushd .
     cd /work/build
+    install_ccache_wrappers
     cmake \
-        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DENABLE_TESTCOVERAGE=ON \
         -DUSE_CUDA=OFF \
         -DUSE_MKL_IF_AVAILABLE=OFF \
@@ -351,9 +341,9 @@ build_ubuntu_cpu_cmake_asan() {
 
     pushd .
     cd /work/build
+    install_ccache_wrappers
+    # TODO: Check if we can remove the g++-8 override
     cmake \
-        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DCMAKE_CXX_COMPILER=/usr/bin/g++-8 \
         -DCMAKE_C_COMPILER=/usr/bin/gcc-8 \
         -DUSE_CUDA=OFF \
@@ -377,10 +367,10 @@ build_ubuntu_cpu_cmake_asan() {
 
 build_ubuntu_cpu_clang39() {
     set -ex
-     export CXX=clang++-3.9
+    export CXX=clang++-3.9
     export CC=clang-3.9
-     build_ccache_wrappers
-     make \
+    install_ccache_wrappers
+    make \
         ENABLE_TESTCOVERAGE=1         \
         USE_CPP_PACKAGE=1             \
         USE_BLAS=openblas             \
@@ -395,7 +385,7 @@ build_ubuntu_cpu_clang60() {
     export CXX=clang++-6.0
     export CC=clang-6.0
 
-    build_ccache_wrappers
+    install_ccache_wrappers
 
     make  \
         ENABLE_TESTCOVERAGE=1         \
@@ -415,9 +405,8 @@ build_ubuntu_cpu_clang_tidy() {
 
     pushd .
     cd /work/build
+    install_ccache_wrappers
     cmake \
-        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
         -DUSE_CUDA=OFF \
         -DUSE_MKL_IF_AVAILABLE=OFF \
         -DUSE_OPENCV=ON \
@@ -438,8 +427,7 @@ build_ubuntu_cpu_clang39_mkldnn() {
     export CXX=clang++-3.9
     export CC=clang-3.9
 
-    build_ccache_wrappers
-
+    install_ccache_wrappers
     make \
         ENABLE_TESTCOVERAGE=1         \
         USE_CPP_PACKAGE=1             \
@@ -455,8 +443,7 @@ build_ubuntu_cpu_clang60_mkldnn() {
     export CXX=clang++-6.0
     export CC=clang-6.0
 
-    build_ccache_wrappers
-
+    install_ccache_wrappers
     make \
         ENABLE_TESTCOVERAGE=1         \
         USE_CPP_PACKAGE=1             \
@@ -469,8 +456,7 @@ build_ubuntu_cpu_clang60_mkldnn() {
 build_ubuntu_cpu_mkldnn() {
     set -ex
 
-    build_ccache_wrappers
-
+    install_ccache_wrappers
     make  \
         DEV=1                         \
         ENABLE_TESTCOVERAGE=1         \
@@ -488,7 +474,7 @@ build_ubuntu_gpu_tensorrt() {
 
     set -ex
 
-    build_ccache_wrappers
+    install_ccache_wrappers
 
     # Build ONNX
     pushd .
@@ -543,8 +529,7 @@ build_ubuntu_gpu_tensorrt() {
 build_ubuntu_gpu_mkldnn() {
     set -ex
 
-    build_ccache_wrappers
-
+    install_ccache_wrappers
     make  \
         DEV=1                                     \
         ENABLE_TESTCOVERAGE=1                     \
@@ -561,8 +546,7 @@ build_ubuntu_gpu_mkldnn() {
 build_ubuntu_gpu_mkldnn_nocudnn() {
     set -ex
 
-    build_ccache_wrappers
-
+    install_ccache_wrappers
     make  \
         DEV=1                                     \
         ENABLE_TESTCOVERAGE=1                     \
@@ -577,8 +561,7 @@ build_ubuntu_gpu_mkldnn_nocudnn() {
 
 build_ubuntu_gpu_cuda91_cudnn7() {
     set -ex
-    # unfortunately this build has problems in 3rdparty dependencies with ccache and make
-    # build_ccache_wrappers
+    install_ccache_wrappers
     make \
         DEV=1                                     \
         ENABLE_TESTCOVERAGE=1                     \
@@ -595,6 +578,7 @@ build_ubuntu_gpu_cuda91_cudnn7() {
 build_ubuntu_amalgamation() {
     set -ex
     # Amalgamation can not be run with -j nproc
+    install_ccache_wrappers
     make -C amalgamation/ clean
     make -C amalgamation/     \
         USE_BLAS=openblas     \
@@ -604,6 +588,7 @@ build_ubuntu_amalgamation() {
 build_ubuntu_amalgamation_min() {
     set -ex
     # Amalgamation can not be run with -j nproc
+    install_ccache_wrappers
     make -C amalgamation/ clean
     make -C amalgamation/     \
         USE_BLAS=openblas     \
@@ -614,9 +599,8 @@ build_ubuntu_amalgamation_min() {
 build_ubuntu_gpu_cmake_mkldnn() {
     set -ex
     cd /work/build
+    install_ccache_wrappers
     cmake \
-        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache    \
-        -DCMAKE_C_COMPILER_LAUNCHER=ccache      \
         -DENABLE_TESTCOVERAGE=ON                \
         -DUSE_CUDA=1                            \
         -DUSE_CUDNN=1                           \
@@ -637,9 +621,8 @@ build_ubuntu_gpu_cmake_mkldnn() {
 build_ubuntu_gpu_cmake() {
     set -ex
     cd /work/build
+    install_ccache_wrappers
     cmake \
-        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache    \
-        -DCMAKE_C_COMPILER_LAUNCHER=ccache      \
         -DENABLE_TESTCOVERAGE=ON                \
         -DUSE_CUDA=1                            \
         -DUSE_CUDNN=1                           \
